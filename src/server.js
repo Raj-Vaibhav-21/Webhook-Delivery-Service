@@ -8,7 +8,9 @@ const server = app.listen(config.port, () => {
 
 function shutdown(signal) {
   console.log(`\n${signal} received, shutting down...`);
-  server.close(() => process.exit(0));
+  server.close(() => process.exit(0)); /* It does not kill the server immediately. 
+                                        It stops accepting new incoming requests, but let any 
+                                        requests that are already being handled finish naturally. */
 }
 
 process.on('SIGINT', () => shutdown('SIGINT'));

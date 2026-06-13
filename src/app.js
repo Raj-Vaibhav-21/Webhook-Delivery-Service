@@ -6,9 +6,13 @@ import { eventsRouter } from './routes/events.js';
 export function createApp() {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
+  /* It parses JSON bytes into a real req.body object so the
+     route handlers get structured data instead of a stream. */
 
-  // Health check is public (load balancers / uptime probes hit this).
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
+  /*Load balancers and uptime probes need to ping /health thousands of times a 
+    day without credentials. By putting it above apiKeyAuth, the request hits this handler,
+    gets answered and never reaches the gate. */
 
   // Everything below requires the API key.
   app.use(apiKeyAuth);
@@ -18,9 +22,9 @@ export function createApp() {
   // 404 fallthrough
   app.use((req, res) => res.status(404).json({ error: 'not found' }));
 
-  // Central error handler. Maps a couple of common Postgres errors to 4xx
-  // so a bad UUID or unique clash isn't reported as a 500.
-  // eslint-disable-next-line no-unused-vars
+  /* Central error handler. Maps a couple of common Postgres errors to 4xx
+  so a bad UUID or unique clash isn't reported as a 500.
+  eslint-disable-next-line no-unused-vars*/
   app.use((err, req, res, next) => {
     if (err.code === '22P02') {
       // invalid text representation (e.g. malformed uuid in the URL)

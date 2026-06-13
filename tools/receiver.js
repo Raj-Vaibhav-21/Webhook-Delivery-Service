@@ -18,7 +18,7 @@ const PORT = Number(process.env.RECEIVER_PORT ?? 4000);
 const SECRET = process.env.RECEIVER_SECRET ?? null;
 
 const app = express();
-// We need the RAW request body to verify the signature — re-parsing and
+// We need the RAW request body to verify the signature; re-parsing and
 // re-serializing JSON could reorder keys and break the HMAC. So capture the
 // body as plain text exactly as it arrived.
 app.use(express.text({ type: '*/*' }));

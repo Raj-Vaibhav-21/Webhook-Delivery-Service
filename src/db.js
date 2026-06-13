@@ -3,14 +3,16 @@ import { config } from './config.js';
 
 export const pool = new pg.Pool({
   connectionString: config.databaseUrl,
-  max: 10,
+  max: 10, /* The most important number in this file. 
+             It's the ceiling on concurrent connections this process will ever hold. */
 });
 
 pool.on('error', (err) => {
-  // A pool-level error (e.g. an idle client dropped by the server) should be
-  // logged, not crash the whole process.
   console.error('Unexpected idle client error', err);
 });
+/* A dropped idle connection is a routine, expected event, and it must not take down our server. 
+We log it and move on; the pool quietly discards the dead connection 
+and opens a fresh one next time it's needed. */
 
 export function query(text, params) {
   return pool.query(text, params);
@@ -32,3 +34,9 @@ export async function withTransaction(fn) {
     client.release();
   }
 }
+/* Why didn't transaction use pool.query here ?
+   It is because a transaction is multiple statements that must run on the same physical connection. 
+   BEGIN, then your INSERTs, then COMMIT - these are stateful; the BEGIN "opens" a transaction on that one connection. 
+   If you fired them through pool.query, each call might land on a different connection from the pool: 
+   BEGIN on connection A, INSERT on connection B (which knows nothing about A's open transaction), COMMIT on connection C. 
+   It won't make any sense. */ 

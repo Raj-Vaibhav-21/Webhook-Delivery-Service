@@ -13,6 +13,7 @@ CREATE TABLE subscriptions (
     created_at  timestamptz NOT NULL DEFAULT now()
 );
 
+
 -- Fan-out lookup at ingest: "which active subs want this event_type?"
 -- Partial index keeps only the rows we actually query (is_active = true).
 CREATE INDEX subscriptions_event_type_active_idx

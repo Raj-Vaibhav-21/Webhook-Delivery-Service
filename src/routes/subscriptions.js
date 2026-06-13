@@ -14,7 +14,9 @@ subscriptionsRouter.post('/', async (req, res, next) => {
     }
     const { target_url, event_type } = parsed.data;
     const secret = parsed.data.secret ?? crypto.randomBytes(32).toString('hex');
-
+    /* Left side of this line keeps the client-chosen string which goes into the 
+       secret column. If the client does not gives any secret key, the right side
+       of ?? creates a fersh 64-char random key. */
     const { rows } = await query(
       `INSERT INTO subscriptions (target_url, event_type, secret)
        VALUES ($1, $2, $3)
