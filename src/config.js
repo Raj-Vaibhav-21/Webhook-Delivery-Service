@@ -14,6 +14,7 @@ export const config = {
                                     Read it with process.env.PORT 
                                     if that's null or undefined, use 3000. */ 
   apiKey: required('API_KEY'),
+  logLevel: process.env.LOG_LEVEL ?? 'info',
 
   worker: {
     pollIntervalMs: Number(process.env.WORKER_POLL_INTERVAL_MS ?? 1000),

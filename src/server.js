@@ -1,16 +1,17 @@
 import { createApp } from './app.js';
 import { config } from './config.js';
+import { logger } from './lib/logger.js';
 
+const log = logger.child({ component: 'api' });
 const app = createApp();
+
 const server = app.listen(config.port, () => {
-  console.log(`Ingest API listening on http://localhost:${config.port}`);
+  log.info({ port: config.port }, 'ingest API listening');
 });
 
 function shutdown(signal) {
-  console.log(`\n${signal} received, shutting down...`);
-  server.close(() => process.exit(0)); /* It does not kill the server immediately. 
-                                        It stops accepting new incoming requests, but let any 
-                                        requests that are already being handled finish naturally. */
+  log.info({ signal }, 'shutting down');
+  server.close(() => process.exit(0));
 }
 
 process.on('SIGINT', () => shutdown('SIGINT'));

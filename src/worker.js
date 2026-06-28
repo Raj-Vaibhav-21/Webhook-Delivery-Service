@@ -2,8 +2,11 @@ import { pool, query } from './db.js';
 import { config } from './config.js';
 import { signPayload } from './lib/signing.js';
 import { nextAttemptAt } from './lib/backoff.js';
+import { logger } from './lib/logger.js';
 
 const { batchSize, pollIntervalMs, maxAttempts, deliveryTimeoutMs, staleLockMs } = config.worker;
+
+const log = logger.child({ component: 'worker' });
 
 let running = true;
 
@@ -120,9 +123,21 @@ async function recordFailure(job, result) {
 }
 
 async function processJob(job) {
+  const dlog = log.child({ delivery_id: job.id, event_id: job.event_id });
+  dlog.info({ attempt: job.attempt_count + 1, target_url: job.target_url }, 'attempting delivery');
   const result = await sendOne(job);
-  if (result.ok) await recordSuccess(job, result);
-  else await recordFailure(job, result);
+  if (result.ok) {
+    await recordSuccess(job, result);
+    dlog.info({ status_code: result.status }, 'delivery succeeded');
+  } else {
+    await recordFailure(job, result);
+    const attempts = job.attempt_count + 1;
+    if (attempts >= maxAttempts) {
+      dlog.error({ status_code: result.status, err: result.error, attempt: attempts }, 'delivery dead-lettered');
+    } else {
+      dlog.warn({ status_code: result.status, err: result.error, attempt: attempts }, 'delivery failed, will retry');
+    }
+  }
 }
 
 // Recover jobs orphaned by a crashed worker: rows stuck in 'delivering' whose
@@ -135,7 +150,7 @@ async function reapStaleLocks() {
        AND locked_at < now() - make_interval(secs => $1)`,
     [staleLockMs / 1000],
   );
-  if (rowCount) console.log(`Reset ${rowCount} stale 'delivering' row(s) back to pending`);
+  if (rowCount) log.warn({ reset_count: rowCount }, 'reset stale delivering rows to pending');
 }
 
 async function tick() {
@@ -155,7 +170,7 @@ function sleep(ms) {
 }
 
 async function loop() {
-  console.log('Worker started. Polling for due deliveries...');
+  log.info('worker started, polling for due deliveries');
   while (running) {
     try {
       const n = await tick();
@@ -163,16 +178,16 @@ async function loop() {
       // right away. Otherwise wait before the next poll.
       if (n < batchSize) await sleep(pollIntervalMs);
     } catch (err) {
-      console.error('Worker tick error:', err);
+      log.error({ err }, 'worker tick error');
       await sleep(pollIntervalMs);
     }
   }
   await pool.end();
-  console.log('Worker stopped cleanly.');
+  log.info('worker stopped cleanly');
 }
 
 process.on('SIGINT', () => {
-  console.log('\nSIGINT: finishing in-flight work, then exiting...');
+  log.info({ signal: 'SIGINT' }, 'finishing in-flight work, then exiting');
   running = false;
 });
 process.on('SIGTERM', () => {
