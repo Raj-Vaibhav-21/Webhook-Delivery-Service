@@ -50,6 +50,8 @@ npm run migrate
 
 Generate a decent API key with: `node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"`
 
+`LOG_LEVEL` (default `info`) tunes log verbosity; suppressed lines are ~free.
+
 ## Running (3 terminals)
 
 ```bash
@@ -57,6 +59,9 @@ npm run receiver   # 1) the test target on :4000
 npm run worker     # 2) the delivery worker
 npm run dev        # 3) the ingest API on :3000
 ```
+
+Logs are pretty-printed by default; prefix any of these with `NODE_ENV=production`
+to get the raw JSON lines CloudWatch ingests.
 
 ## End-to-end test
 
@@ -119,6 +124,17 @@ compare.
 **Stale-lock reaper.** If a worker crashes mid-delivery, its rows would be stuck
 in `delivering`. The worker resets any `delivering` row whose lock is older than
 `WORKER_STALE_LOCK_MS` back to `pending`.
+
+**Structured logging with a correlation ID.** One shared pino logger
+(`src/lib/logger.js`) writes pretty colorized lines in dev and raw
+newline-delimited JSON in prod (`NODE_ENV=production`) — the JSON is what
+CloudWatch / Logs Insights ingests. The worker binds a child logger with
+`delivery_id` + `event_id` before processing each delivery, so every line for a
+delivery (attempt → succeeded / will-retry / dead-lettered) carries those IDs and
+one grep on `event_id` reconstructs a webhook's whole story. Severity is the
+signal: `warn` for an expected, recoverable retry; `error` only when a delivery
+is permanently dead-lettered. Per-sub HMAC secrets are redacted
+(`redact: ['secret', '*.secret']`) before anything is written.
 
 ## Known V1 tradeoffs (deliberately deferred)
 

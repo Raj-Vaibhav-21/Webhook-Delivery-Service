@@ -1,48 +1,57 @@
 @host = http://localhost:3000
-@apiKey = replace-with-your-API_KEY
+@apiKey = <your-api-key>
 
-### Health (no auth)
+### 1. Health check (no auth — sits above the apiKeyAuth gate)
 GET {{host}}/health
 
-### Create a subscription — copy the returned "id" and "secret"
+### 2. Create a subscription pointing at the local receiver
 POST {{host}}/subscriptions
 x-api-key: {{apiKey}}
 content-type: application/json
 
 {
   "target_url": "http://localhost:4000/hook",
-  "event_type": "user.created"
+  "event_type": "employee.terminated"
 }
 
-### List subscriptions
-GET {{host}}/subscriptions
-x-api-key: {{apiKey}}
-
-### Ingest an event (returns 202 immediately) — copy the returned "event_id"
+### 3. Ingest an event (named so the next request can read its response)
+# @name ingestEvent
 POST {{host}}/events
 x-api-key: {{apiKey}}
 content-type: application/json
-idempotency-key: evt-001
+idempotency-key: demo-terminated-001
 
 {
-  "event_type": "user.created",
-  "payload": { "user_id": 42, "email": "a@b.com" }
+  "event_type": "employee.terminated",
+  "payload": { "employee_id": 42, "last_day": "2026-06-23" }
 }
 
-### Re-send the SAME idempotency-key => "duplicate": true, no new deliveries
+### 4. See what happened to that event — event_id chained from request #3
+GET {{host}}/events/{{ingestEvent.response.body.$.event_id}}/deliveries
+x-api-key: {{apiKey}}
+
+### 5. Subscription on a FAILING endpoint (distinct event_type) — demo retries + dead-letter
+POST {{host}}/subscriptions
+x-api-key: {{apiKey}}
+content-type: application/json
+
+{
+  "target_url": "http://localhost:4000/hook?fail=1",
+  "event_type": "employee.suspended"
+}
+
+### 6. Ingest an event for the failing subscription — watch attempt_count climb, then dead-letter
+# @name ingestFailing
 POST {{host}}/events
 x-api-key: {{apiKey}}
 content-type: application/json
-idempotency-key: evt-001
+idempotency-key: demo-suspended-001
 
 {
-  "event_type": "user.created",
-  "payload": { "user_id": 42, "email": "a@b.com" }
+  "event_type": "employee.suspended",
+  "payload": { "employee_id": 99, "reason": "policy_violation" }
 }
 
-### Point a subscription at a FAILING endpoint to watch retries + dead-letter
-# (create another subscription with target_url http://localhost:4000/hook?fail=1)
-
-### See what happened to an event — paste the event_id from the ingest response
-GET {{host}}/events/PASTE_EVENT_ID/deliveries
+### 7. (bonus) Track the failing event's deliveries — re-Send this to watch the retries
+GET {{host}}/events/{{ingestFailing.response.body.$.event_id}}/deliveries
 x-api-key: {{apiKey}}
